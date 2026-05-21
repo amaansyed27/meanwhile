@@ -120,13 +120,15 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
   return (
     <main className="min-h-screen md:grid md:grid-cols-[288px_minmax(0,1fr)]">
       <aside className="sticky top-0 z-20 flex h-auto flex-col border-b border-border bg-background/95 backdrop-blur md:h-screen md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between px-4 py-4">
-          <Link href="/" aria-label="mnwhl home">
-            <Logo />
-          </Link>
-          <ThemeToggle />
+        <div className="border-b border-border px-4 pb-5 pt-5">
+          <div className="flex items-start justify-between gap-4">
+            <Link href="/" aria-label="mnwhl home" className="min-w-0">
+              <Logo />
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
-        <div className="px-4 pb-4">
+        <div className="px-4 py-4">
           <label className="relative block">
             <Search
               size={14}
@@ -141,7 +143,7 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
             />
           </label>
         </div>
-        <nav className="mnwhl-scrollbar flex gap-2 overflow-x-auto border-t border-border px-4 py-3 md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-t-0 md:py-0">
+        <nav className="mnwhl-scrollbar flex gap-2 overflow-x-auto border-t border-border px-4 py-4 md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:py-4">
           <ThreadSection
             title="active"
             threads={activeThreads}

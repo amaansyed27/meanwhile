@@ -95,8 +95,8 @@ export function OwnerDashboard() {
   return (
     <main className="min-h-screen md:grid md:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur md:h-screen md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between px-4 py-4">
-          <Link href="/">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-4 pb-5 pt-5">
+          <Link href="/" className="min-w-0">
             <Logo />
           </Link>
           <div className="flex items-center gap-2">
@@ -114,11 +114,13 @@ export function OwnerDashboard() {
             </Button>
           </div>
         </div>
-        <CreateThreadForm
-          onCreated={(id) => {
-            setSelectedId(id);
-          }}
-        />
+        <div className="pt-4">
+          <CreateThreadForm
+            onCreated={(id) => {
+              setSelectedId(id);
+            }}
+          />
+        </div>
         <div className="mnwhl-scrollbar max-h-[42vh] overflow-y-auto border-t border-border px-4 py-4 md:max-h-none">
           <p className="mb-3 font-mono text-[11px] uppercase text-faint">threads</p>
           <div className="space-y-2">
