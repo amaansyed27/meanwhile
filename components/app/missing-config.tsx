@@ -16,8 +16,8 @@ export function MissingConfig() {
           configuration needed
         </h1>
         <p className="mt-4 text-sm leading-6 text-muted">
-          add Convex and Clerk environment variables, then restart the app. the
-          required keys are listed in <code>.env.example</code>.
+          add the Convex environment variable, then restart the app. the required
+          keys are listed in <code>.env.example</code>.
         </p>
       </section>
     </main>

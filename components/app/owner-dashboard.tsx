@@ -6,12 +6,13 @@ import {
   ArrowUpRight,
   ImageIcon,
   LinkIcon,
+  LogOut,
   Plus,
   Save,
   Send,
   Trash2
 } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -21,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Logo } from "@/components/app/logo";
 import { StatusBadge } from "@/components/app/status-badge";
 import { ThemeToggle } from "@/components/app/theme-toggle";
-import { useRegisterViewer } from "@/components/app/register-viewer";
 import { THREAD_STATUSES, type ThreadStatus } from "@/lib/status";
 import { formatShortTime } from "@/lib/utils";
 
@@ -45,12 +45,28 @@ type Message = {
   createdAt: number;
 };
 
+async function ownerRpc<T>(
+  action: string,
+  args: Record<string, unknown> = {}
+): Promise<T> {
+  const response = await fetch("/api/owner/rpc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, args })
+  });
+  const json = (await response.json()) as { error?: string } & T;
+  if (!response.ok) {
+    throw new Error(json.error ?? "Owner action failed");
+  }
+  return json;
+}
+
 export function OwnerDashboard() {
-  useRegisterViewer();
-  const viewer = useQuery(api.viewer.me);
-  const threads = useQuery(api.threads.list, {
-    includeArchived: true
-  }) as Thread[] | undefined;
+  const [session, setSession] = useState<"loading" | "in" | "out">("loading");
+  const threads = useQuery(
+    api.threads.list,
+    session === "in" ? { includeArchived: true } : "skip"
+  ) as Thread[] | undefined;
   const [selectedId, setSelectedId] = useState<Id<"threads"> | null>(null);
   const selectedThread = useMemo(
     () => threads?.find((thread) => thread._id === selectedId) ?? threads?.[0] ?? null,
@@ -58,32 +74,22 @@ export function OwnerDashboard() {
   );
   const messages = useQuery(
     api.messages.list,
-    selectedThread ? { threadId: selectedThread._id } : "skip"
+    session === "in" && selectedThread ? { threadId: selectedThread._id } : "skip"
   ) as Message[] | undefined;
 
-  if (viewer === undefined) {
+  useEffect(() => {
+    void fetch("/api/owner/session")
+      .then((response) => response.json())
+      .then((json: { isOwner?: boolean }) => setSession(json.isOwner ? "in" : "out"))
+      .catch(() => setSession("out"));
+  }, []);
+
+  if (session === "loading") {
     return <OwnerLoading />;
   }
 
-  if (!viewer.isOwner) {
-    return (
-      <main className="grid min-h-screen place-items-center px-6">
-        <section className="max-w-md border border-border p-8">
-          <Logo className="mb-8" />
-          <h1 className="text-xl font-medium lowercase">read-only account</h1>
-          <p className="mt-4 text-sm leading-6 text-muted">
-            this route is reserved for the owner account. backend mutations will
-            reject publishing attempts from this session.
-          </p>
-          <Link
-            href="/"
-            className="mt-6 inline-flex border-b border-border text-sm text-muted hover:border-foreground hover:text-foreground"
-          >
-            return to public thread
-          </Link>
-        </section>
-      </main>
-    );
+  if (session === "out") {
+    return <OwnerLogin onSuccess={() => setSession("in")} />;
   }
 
   return (
@@ -93,7 +99,20 @@ export function OwnerDashboard() {
           <Link href="/">
             <Logo />
           </Link>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button
+              className="h-8 w-8 px-0"
+              aria-label="log out"
+              onClick={() => {
+                void fetch("/api/owner/logout", { method: "POST" }).then(() =>
+                  setSession("out")
+                );
+              }}
+            >
+              <LogOut size={14} />
+            </Button>
+          </div>
         </div>
         <CreateThreadForm
           onCreated={(id) => {
@@ -153,8 +172,65 @@ function OwnerLoading() {
   );
 }
 
+function OwnerLogin({ onSuccess }: { onSuccess: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const response = await fetch("/api/owner/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+      const json = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(json.error ?? "Login failed");
+      }
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="grid min-h-screen place-items-center px-6">
+      <form onSubmit={submit} className="w-full max-w-sm border border-border p-8">
+        <Logo className="mb-8" />
+        <h1 className="text-xl font-medium lowercase">owner login</h1>
+        <p className="mt-3 text-sm leading-6 text-muted">
+          private terminal for publishing ongoing thoughts.
+        </p>
+        <Input
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          type="password"
+          placeholder="password"
+          className="mt-6"
+          autoFocus
+          required
+        />
+        <Button
+          type="submit"
+          variant="solid"
+          className="mt-3 w-full"
+          disabled={busy || password.length === 0}
+        >
+          enter
+        </Button>
+        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+      </form>
+    </main>
+  );
+}
+
 function CreateThreadForm({ onCreated }: { onCreated: (id: Id<"threads">) => void }) {
-  const createThread = useMutation(api.threads.create);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -177,7 +253,7 @@ function CreateThreadForm({ onCreated }: { onCreated: (id: Id<"threads">) => voi
     setError(null);
     setBusy(true);
     try {
-      const id = await createThread({
+      const { id } = await ownerRpc<{ id: Id<"threads"> }>("createThread", {
         title,
         description: description || undefined,
         status: "active"
@@ -240,8 +316,6 @@ function OwnerHeader({ thread }: { thread: Thread }) {
 }
 
 function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
-  const postMessage = useMutation(api.messages.post);
-  const generateUploadUrl = useMutation(api.uploads.generateUploadUrl);
   const [content, setContent] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -261,7 +335,7 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
       throw new Error("Images must be 8 MB or smaller");
     }
 
-    const uploadUrl = await generateUploadUrl();
+    const { uploadUrl } = await ownerRpc<{ uploadUrl: string }>("uploadUrl");
     const result = await fetch(uploadUrl, {
       method: "POST",
       headers: { "Content-Type": file.type },
@@ -279,7 +353,7 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
     setBusy(true);
     try {
       const imageStorageId = await uploadImage();
-      await postMessage({
+      await ownerRpc("postMessage", {
         threadId,
         content,
         linkUrl: linkUrl || undefined,
@@ -357,8 +431,6 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
 }
 
 function OwnerMessageList({ messages }: { messages: Message[] | undefined }) {
-  const removeMessage = useMutation(api.messages.remove);
-
   if (!messages) {
     return (
       <div className="space-y-4 py-8">
@@ -386,7 +458,7 @@ function OwnerMessageList({ messages }: { messages: Message[] | undefined }) {
                 aria-label="delete message"
                 onClick={() => {
                   if (confirm("delete this update?")) {
-                    void removeMessage({ messageId: message._id });
+                    void ownerRpc("deleteMessage", { messageId: message._id });
                   }
                 }}
               >
@@ -425,8 +497,6 @@ function OwnerMessageList({ messages }: { messages: Message[] | undefined }) {
 }
 
 function ThreadEditor({ thread }: { thread: Thread }) {
-  const updateThread = useMutation(api.threads.update);
-  const removeThread = useMutation(api.threads.remove);
   const [title, setTitle] = useState(thread.title);
   const [description, setDescription] = useState(thread.description ?? "");
   const [status, setStatus] = useState<ThreadStatus>(thread.status);
@@ -437,7 +507,7 @@ function ThreadEditor({ thread }: { thread: Thread }) {
     setError(null);
     setSaved(false);
     try {
-      await updateThread({
+      await ownerRpc("updateThread", {
         threadId: thread._id,
         title,
         description: description || undefined,
@@ -480,7 +550,7 @@ function ThreadEditor({ thread }: { thread: Thread }) {
             variant="danger"
             onClick={() => {
               if (confirm("delete this thread and all of its updates?")) {
-                void removeThread({ threadId: thread._id });
+                void ownerRpc("deleteThread", { threadId: thread._id });
               }
             }}
           >

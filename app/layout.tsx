@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "./providers";
@@ -16,8 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+const surface = process.env.MNWHL_SURFACE;
+const appDescription =
+  surface === "owner"
+    ? "private terminal for publishing ongoing things."
+    : "a quiet place for ongoing things.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
@@ -25,11 +28,11 @@ export const metadata: Metadata = {
     default: "mnwhl",
     template: "%s / mnwhl"
   },
-  description: "a quiet place for ongoing things.",
+  description: appDescription,
   applicationName: "mnwhl",
   openGraph: {
     title: "mnwhl",
-    description: "a quiet place for ongoing things.",
+    description: appDescription,
     url: appUrl,
     siteName: "mnwhl",
     images: ["/opengraph-image.png"],
@@ -38,7 +41,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "mnwhl",
-    description: "a quiet place for ongoing things.",
+    description: appDescription,
     images: ["/opengraph-image.png"]
   },
   icons: {
@@ -57,7 +60,7 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const missing = !clerkKey || !convexUrl;
+  const missing = !convexUrl;
 
   if (missing) {
     return (
@@ -70,12 +73,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <ClerkProvider publishableKey={clerkKey}>
-      <html lang="en" suppressHydrationWarning>
-        <body className={`${geistSans.variable} ${geistMono.variable}`}>
-          <AppProviders>{children}</AppProviders>
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <AppProviders>{children}</AppProviders>
+      </body>
+    </html>
   );
 }

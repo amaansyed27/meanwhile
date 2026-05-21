@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { statusValidator } from "./schema";
-import { displayName, getIdentity, requireIdentity, requireOwner } from "./lib/auth";
+import { requireServerSecret } from "./lib/secrets";
 import { enforceRateLimit } from "./lib/rateLimit";
 import {
   cleanOptionalText,
@@ -30,18 +30,8 @@ async function uniqueSlug(ctx: MutationCtx, title: string) {
   return candidate;
 }
 
-async function withViewerHeart(ctx: QueryCtx, thread: Doc<"threads">) {
-  const identity = await getIdentity(ctx);
-  if (!identity) {
-    return { ...thread, viewerHasHearted: false };
-  }
-  const reaction = await ctx.db
-    .query("threadReactions")
-    .withIndex("by_thread_user", (q) =>
-      q.eq("threadId", thread._id).eq("userTokenIdentifier", identity.tokenIdentifier)
-    )
-    .unique();
-  return { ...thread, viewerHasHearted: Boolean(reaction) };
+async function withViewerHeart(_ctx: QueryCtx, thread: Doc<"threads">) {
+  return { ...thread, viewerHasHearted: false };
 }
 
 export const list = query({
@@ -91,11 +81,12 @@ export const create = mutation({
   args: {
     title: v.string(),
     description: v.optional(v.string()),
-    status: v.optional(statusValidator)
+    status: v.optional(statusValidator),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    const identity = await requireOwner(ctx);
-    await enforceRateLimit(ctx, identity.tokenIdentifier, "create-thread", 10, 60_000);
+    requireServerSecret(ctx, args.serverSecret);
+    await enforceRateLimit(ctx, "owner", "create-thread", 10, 60_000);
 
     const now = Date.now();
     const title = cleanText(args.title, 120);
@@ -107,9 +98,7 @@ export const create = mutation({
       slug,
       description,
       status: args.status ?? "active",
-      ownerSubject: identity.subject,
-      ownerTokenIdentifier: identity.tokenIdentifier,
-      ownerName: displayName(identity),
+      ownerName: "mnwhl",
       searchText: searchText(title, description),
       heartCount: 0,
       messageCount: 0,
@@ -124,10 +113,11 @@ export const update = mutation({
     threadId: v.id("threads"),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
-    status: v.optional(statusValidator)
+    status: v.optional(statusValidator),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    requireServerSecret(ctx, args.serverSecret);
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
       throw new Error("Thread not found");
@@ -151,10 +141,11 @@ export const update = mutation({
 
 export const remove = mutation({
   args: {
-    threadId: v.id("threads")
+    threadId: v.id("threads"),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    requireServerSecret(ctx, args.serverSecret);
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
       throw new Error("Thread not found");
@@ -189,11 +180,13 @@ export const remove = mutation({
 
 export const toggleHeart = mutation({
   args: {
-    threadId: v.id("threads")
+    threadId: v.id("threads"),
+    actorHash: v.string(),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    const identity = await requireIdentity(ctx);
-    await enforceRateLimit(ctx, identity.tokenIdentifier, "heart-thread", 60, 60_000);
+    requireServerSecret(ctx, args.serverSecret);
+    await enforceRateLimit(ctx, args.actorHash, "heart-thread", 60, 60_000);
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
       throw new Error("Thread not found");
@@ -201,8 +194,8 @@ export const toggleHeart = mutation({
 
     const existing = await ctx.db
       .query("threadReactions")
-      .withIndex("by_thread_user", (q) =>
-        q.eq("threadId", args.threadId).eq("userTokenIdentifier", identity.tokenIdentifier)
+      .withIndex("by_thread_actorHash", (q) =>
+        q.eq("threadId", args.threadId).eq("actorHash", args.actorHash)
       )
       .unique();
 
@@ -217,7 +210,7 @@ export const toggleHeart = mutation({
 
     await ctx.db.insert("threadReactions", {
       threadId: args.threadId,
-      userTokenIdentifier: identity.tokenIdentifier,
+      actorHash: args.actorHash,
       createdAt: Date.now()
     });
     await ctx.db.patch(args.threadId, {

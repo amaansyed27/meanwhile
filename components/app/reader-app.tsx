@@ -3,18 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Heart, Search } from "lucide-react";
-import { SignInButton } from "@clerk/nextjs";
 import { motion } from "framer-motion";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { AuthActions } from "@/components/app/auth-actions";
 import { Logo } from "@/components/app/logo";
-import { MessageStream } from "@/components/app/message-stream";
+import { MessageStream, type StreamMessage } from "@/components/app/message-stream";
 import { StatusBadge } from "@/components/app/status-badge";
 import { ThemeToggle } from "@/components/app/theme-toggle";
-import { useRegisterViewer } from "@/components/app/register-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
@@ -34,9 +31,29 @@ type Thread = {
   viewerHasHearted: boolean;
 };
 
+type ReactionState = {
+  threadHearted: boolean;
+  upvotedMessageIds: Array<Id<"messages">>;
+};
+
+async function postReaction(body: Record<string, unknown>) {
+  const response = await fetch("/api/reactions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const json = (await response.json()) as { error?: string };
+    throw new Error(json.error ?? "Reaction failed");
+  }
+}
+
 export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
-  useRegisterViewer();
   const [search, setSearch] = useState("");
+  const [reactionState, setReactionState] = useState<ReactionState>({
+    threadHearted: false,
+    upvotedMessageIds: []
+  });
   const searchRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const threads = useQuery(api.threads.list, {
@@ -63,7 +80,27 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
   const messages = useQuery(
     api.messages.list,
     selected ? { threadId: selected._id } : "skip"
-  );
+  ) as StreamMessage[] | undefined;
+
+  useEffect(() => {
+    if (!selected || !messages) {
+      return;
+    }
+    void fetch("/api/reactions/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId: selected._id,
+        messageIds: messages.map((message) => message._id)
+      })
+    })
+      .then((response) => response.json())
+      .then((state: ReactionState) => setReactionState(state))
+      .catch(() =>
+        setReactionState({ threadHearted: false, upvotedMessageIds: [] })
+      );
+  }, [selected, messages]);
+
   const activeThreads = useMemo(
     () => threads?.filter((thread) => thread.status !== "archived") ?? [],
     [threads]
@@ -72,6 +109,13 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
     () => threads?.filter((thread) => thread.status === "archived") ?? [],
     [threads]
   );
+  const decoratedMessages = useMemo(() => {
+    const upvoted = new Set(reactionState.upvotedMessageIds);
+    return messages?.map((message) => ({
+      ...message,
+      viewerHasUpvoted: upvoted.has(message._id)
+    }));
+  }, [messages, reactionState.upvotedMessageIds]);
 
   return (
     <main className="min-h-screen md:grid md:grid-cols-[288px_minmax(0,1fr)]">
@@ -80,9 +124,7 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
           <Link href="/" aria-label="mnwhl home">
             <Logo />
           </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-          </div>
+          <ThemeToggle />
         </div>
         <div className="px-4 pb-4">
           <label className="relative block">
@@ -112,8 +154,8 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
         </nav>
         <div className="hidden border-t border-border px-4 py-4 md:block">
           <div className="mb-3 flex items-center justify-between">
-            <span className="font-mono text-[11px] uppercase text-faint">session</span>
-            <AuthActions />
+            <span className="font-mono text-[11px] uppercase text-faint">read-only</span>
+            <span className="font-mono text-[11px] text-muted">ip reactions</span>
           </div>
           <Link
             href="/owner"
@@ -127,8 +169,20 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
 
       <section className="min-w-0 px-5 pb-20 pt-8 md:px-10 lg:px-16">
         <div className="mx-auto max-w-4xl">
-          <ThreadHeader thread={selected ?? null} loading={selected === undefined} />
-          <MessageStream messages={messages} loading={selected !== null && messages === undefined} />
+          <ThreadHeader
+            thread={selected ? { ...selected, viewerHasHearted: reactionState.threadHearted } : null}
+            loading={selected === undefined}
+            onToggleHeart={(threadId) => {
+              void postReaction({ action: "heartThread", threadId });
+            }}
+          />
+          <MessageStream
+            messages={decoratedMessages}
+            loading={selected !== null && messages === undefined}
+            onToggleUpvote={(messageId) => {
+              void postReaction({ action: "upvoteMessage", messageId });
+            }}
+          />
         </div>
       </section>
     </main>
@@ -196,14 +250,13 @@ function ThreadSection({
 
 function ThreadHeader({
   thread,
-  loading
+  loading,
+  onToggleHeart
 }: {
   thread: Thread | null;
   loading: boolean;
+  onToggleHeart: (threadId: Id<"threads">) => void;
 }) {
-  const toggleHeart = useMutation(api.threads.toggleHeart);
-  const { isAuthenticated } = useConvexAuth();
-
   if (loading) {
     return (
       <header className="animate-pulse border-b border-border pb-8">
@@ -223,21 +276,6 @@ function ThreadHeader({
       </header>
     );
   }
-
-  const heartButton = (
-    <Button
-      variant={thread.viewerHasHearted ? "solid" : "outline"}
-      className="h-8"
-      onClick={() => {
-        if (isAuthenticated) {
-          void toggleHeart({ threadId: thread._id });
-        }
-      }}
-    >
-      <Heart size={14} className={thread.viewerHasHearted ? "fill-current" : ""} />
-      {thread.heartCount}
-    </Button>
-  );
 
   return (
     <motion.header
@@ -267,7 +305,14 @@ function ThreadHeader({
           <span className="font-mono text-[11px] uppercase text-faint">
             {thread.messageCount} updates
           </span>
-          {isAuthenticated ? heartButton : <SignInButton mode="modal">{heartButton}</SignInButton>}
+          <Button
+            variant={thread.viewerHasHearted ? "solid" : "outline"}
+            className="h-8"
+            onClick={() => onToggleHeart(thread._id)}
+          >
+            <Heart size={14} className={thread.viewerHasHearted ? "fill-current" : ""} />
+            {thread.heartCount}
+          </Button>
         </div>
       </div>
     </motion.header>

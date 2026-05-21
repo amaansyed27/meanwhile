@@ -11,26 +11,11 @@ export const statusValidator = v.union(
 );
 
 export default defineSchema({
-  users: defineTable({
-    tokenIdentifier: v.string(),
-    subject: v.string(),
-    email: v.optional(v.string()),
-    name: v.optional(v.string()),
-    imageUrl: v.optional(v.string()),
-    lastSeenAt: v.number(),
-    createdAt: v.number()
-  })
-    .index("by_token", ["tokenIdentifier"])
-    .index("by_subject", ["subject"])
-    .index("by_email", ["email"]),
-
   threads: defineTable({
     title: v.string(),
     slug: v.string(),
     description: v.optional(v.string()),
     status: statusValidator,
-    ownerTokenIdentifier: v.string(),
-    ownerSubject: v.string(),
     ownerName: v.optional(v.string()),
     searchText: v.string(),
     heartCount: v.number(),
@@ -52,8 +37,6 @@ export default defineSchema({
     content: v.string(),
     linkUrl: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
-    ownerTokenIdentifier: v.string(),
-    ownerSubject: v.string(),
     upvoteCount: v.number(),
     createdAt: v.number(),
     updatedAt: v.optional(v.number())
@@ -63,26 +46,24 @@ export default defineSchema({
 
   threadReactions: defineTable({
     threadId: v.id("threads"),
-    userTokenIdentifier: v.string(),
+    actorHash: v.string(),
     createdAt: v.number()
   })
     .index("by_thread", ["threadId"])
-    .index("by_thread_user", ["threadId", "userTokenIdentifier"])
-    .index("by_user", ["userTokenIdentifier"]),
+    .index("by_thread_actorHash", ["threadId", "actorHash"])
+    .index("by_actorHash", ["actorHash"]),
 
   messageUpvotes: defineTable({
     messageId: v.id("messages"),
-    userTokenIdentifier: v.string(),
+    actorHash: v.string(),
     createdAt: v.number()
   })
     .index("by_message", ["messageId"])
-    .index("by_message_user", ["messageId", "userTokenIdentifier"])
-    .index("by_user", ["userTokenIdentifier"]),
+    .index("by_message_actorHash", ["messageId", "actorHash"])
+    .index("by_actorHash", ["actorHash"]),
 
   uploads: defineTable({
     storageId: v.id("_storage"),
-    uploadedByTokenIdentifier: v.string(),
-    uploadedBySubject: v.string(),
     threadId: v.optional(v.id("threads")),
     messageId: v.optional(v.id("messages")),
     filename: v.optional(v.string()),
@@ -92,8 +73,7 @@ export default defineSchema({
   })
     .index("by_storage", ["storageId"])
     .index("by_thread", ["threadId"])
-    .index("by_message", ["messageId"])
-    .index("by_uploadedByTokenIdentifier", ["uploadedByTokenIdentifier"]),
+    .index("by_message", ["messageId"]),
 
   rateLimits: defineTable({
     key: v.string(),

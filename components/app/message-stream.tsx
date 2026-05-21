@@ -2,14 +2,11 @@
 
 import Image from "next/image";
 import { ArrowUp, ExternalLink } from "lucide-react";
-import { SignInButton } from "@clerk/nextjs";
-import { useConvexAuth, useMutation } from "convex/react";
 import type { Id } from "@/convex/_generated/dataModel";
-import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { formatShortTime } from "@/lib/utils";
 
-type Message = {
+export type StreamMessage = {
   _id: Id<"messages">;
   content: string;
   linkUrl?: string;
@@ -21,10 +18,12 @@ type Message = {
 
 export function MessageStream({
   messages,
-  loading
+  loading,
+  onToggleUpvote
 }: {
-  messages: Message[] | undefined;
+  messages: StreamMessage[] | undefined;
   loading: boolean;
+  onToggleUpvote: (messageId: Id<"messages">) => void;
 }) {
   if (loading) {
     return (
@@ -50,30 +49,23 @@ export function MessageStream({
   return (
     <ol className="space-y-10 py-8">
       {messages.map((message) => (
-        <MessageRow key={message._id} message={message} />
+        <MessageRow
+          key={message._id}
+          message={message}
+          onToggleUpvote={onToggleUpvote}
+        />
       ))}
     </ol>
   );
 }
 
-function MessageRow({ message }: { message: Message }) {
-  const toggleUpvote = useMutation(api.messages.toggleUpvote);
-  const { isAuthenticated } = useConvexAuth();
-  const button = (
-    <Button
-      className="h-7 gap-1 border-0 px-0 font-mono text-[11px] text-muted hover:bg-transparent hover:text-foreground"
-      onClick={() => {
-        if (isAuthenticated) {
-          void toggleUpvote({ messageId: message._id });
-        }
-      }}
-      aria-label={message.viewerHasUpvoted ? "remove upvote" : "upvote message"}
-    >
-      <ArrowUp size={13} className={message.viewerHasUpvoted ? "fill-current" : ""} />
-      {message.upvoteCount}
-    </Button>
-  );
-
+function MessageRow({
+  message,
+  onToggleUpvote
+}: {
+  message: StreamMessage;
+  onToggleUpvote: (messageId: Id<"messages">) => void;
+}) {
   return (
     <li className="group grid gap-3 border-l border-border pl-4 md:grid-cols-[112px_minmax(0,1fr)] md:border-l-0 md:pl-0">
       <time
@@ -110,11 +102,17 @@ function MessageRow({ message }: { message: Message }) {
           </div>
         ) : null}
         <div className="mt-3">
-          {isAuthenticated ? (
-            button
-          ) : (
-            <SignInButton mode="modal">{button}</SignInButton>
-          )}
+          <Button
+            className="h-7 gap-1 border-0 px-0 font-mono text-[11px] text-muted hover:bg-transparent hover:text-foreground"
+            onClick={() => onToggleUpvote(message._id)}
+            aria-label={message.viewerHasUpvoted ? "remove upvote" : "upvote message"}
+          >
+            <ArrowUp
+              size={13}
+              className={message.viewerHasUpvoted ? "fill-current" : ""}
+            />
+            {message.upvoteCount}
+          </Button>
         </div>
       </article>
     </li>

@@ -8,15 +8,15 @@
  * @module
  */
 
-import type * as lib_auth from "../lib/auth.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
+import type * as lib_secrets from "../lib/secrets.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_uploads from "../lib/uploads.js";
 import type * as messages from "../messages.js";
+import type * as reactions from "../reactions.js";
 import type * as seed from "../seed.js";
 import type * as threads from "../threads.js";
 import type * as uploads from "../uploads.js";
-import type * as viewer from "../viewer.js";
 
 import type {
   ApiFromModules,
@@ -25,15 +25,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  "lib/auth": typeof lib_auth;
   "lib/rateLimit": typeof lib_rateLimit;
+  "lib/secrets": typeof lib_secrets;
   "lib/text": typeof lib_text;
   "lib/uploads": typeof lib_uploads;
   messages: typeof messages;
+  reactions: typeof reactions;
   seed: typeof seed;
   threads: typeof threads;
   uploads: typeof uploads;
-  viewer: typeof viewer;
 }>;
 
 /**

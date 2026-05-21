@@ -2,24 +2,12 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
-import { displayName, getIdentity, requireIdentity, requireOwner } from "./lib/auth";
+import { requireServerSecret } from "./lib/secrets";
 import { enforceRateLimit } from "./lib/rateLimit";
 import { cleanMessage, normalizeUrl } from "./lib/text";
 import { validateImageUpload } from "./lib/uploads";
 
 async function withViewerVoteAndImage(ctx: QueryCtx, message: Doc<"messages">) {
-  const identity = await getIdentity(ctx);
-  const upvote = identity
-    ? await ctx.db
-        .query("messageUpvotes")
-        .withIndex("by_message_user", (q) =>
-          q
-            .eq("messageId", message._id)
-            .eq("userTokenIdentifier", identity.tokenIdentifier)
-        )
-        .unique()
-    : null;
-
   const imageUrl = message.imageStorageId
     ? await ctx.storage.getUrl(message.imageStorageId)
     : null;
@@ -27,7 +15,7 @@ async function withViewerVoteAndImage(ctx: QueryCtx, message: Doc<"messages">) {
   return {
     ...message,
     imageUrl,
-    viewerHasUpvoted: Boolean(upvote)
+    viewerHasUpvoted: false
   };
 }
 
@@ -59,11 +47,12 @@ export const post = mutation({
     content: v.string(),
     linkUrl: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
-    filename: v.optional(v.string())
+    filename: v.optional(v.string()),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    const identity = await requireOwner(ctx);
-    await enforceRateLimit(ctx, identity.tokenIdentifier, "post-message", 40, 60_000);
+    requireServerSecret(ctx, args.serverSecret);
+    await enforceRateLimit(ctx, "owner", "post-message", 40, 60_000);
 
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
@@ -84,8 +73,6 @@ export const post = mutation({
       content,
       linkUrl,
       imageStorageId: args.imageStorageId,
-      ownerTokenIdentifier: identity.tokenIdentifier,
-      ownerSubject: identity.subject,
       upvoteCount: 0,
       createdAt: now
     });
@@ -93,8 +80,6 @@ export const post = mutation({
     if (args.imageStorageId && uploadMetadata) {
       await ctx.db.insert("uploads", {
         storageId: args.imageStorageId,
-        uploadedByTokenIdentifier: identity.tokenIdentifier,
-        uploadedBySubject: identity.subject,
         threadId: args.threadId,
         messageId,
         filename: args.filename,
@@ -105,7 +90,7 @@ export const post = mutation({
     }
 
     await ctx.db.patch(args.threadId, {
-      ownerName: displayName(identity),
+      ownerName: "mnwhl",
       messageCount: thread.messageCount + 1,
       lastMessageAt: now,
       updatedAt: now
@@ -119,10 +104,11 @@ export const update = mutation({
   args: {
     messageId: v.id("messages"),
     content: v.string(),
-    linkUrl: v.optional(v.string())
+    linkUrl: v.optional(v.string()),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    requireServerSecret(ctx, args.serverSecret);
     const message = await ctx.db.get(args.messageId);
     if (!message) {
       throw new Error("Message not found");
@@ -138,10 +124,11 @@ export const update = mutation({
 
 export const remove = mutation({
   args: {
-    messageId: v.id("messages")
+    messageId: v.id("messages"),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    requireServerSecret(ctx, args.serverSecret);
     const message = await ctx.db.get(args.messageId);
     if (!message) {
       throw new Error("Message not found");
@@ -177,11 +164,13 @@ export const remove = mutation({
 
 export const toggleUpvote = mutation({
   args: {
-    messageId: v.id("messages")
+    messageId: v.id("messages"),
+    actorHash: v.string(),
+    serverSecret: v.string()
   },
   handler: async (ctx, args) => {
-    const identity = await requireIdentity(ctx);
-    await enforceRateLimit(ctx, identity.tokenIdentifier, "upvote-message", 120, 60_000);
+    requireServerSecret(ctx, args.serverSecret);
+    await enforceRateLimit(ctx, args.actorHash, "upvote-message", 120, 60_000);
 
     const message = await ctx.db.get(args.messageId);
     if (!message) {
@@ -190,8 +179,8 @@ export const toggleUpvote = mutation({
 
     const existing = await ctx.db
       .query("messageUpvotes")
-      .withIndex("by_message_user", (q) =>
-        q.eq("messageId", args.messageId).eq("userTokenIdentifier", identity.tokenIdentifier)
+      .withIndex("by_message_actorHash", (q) =>
+        q.eq("messageId", args.messageId).eq("actorHash", args.actorHash)
       )
       .unique();
 
@@ -205,7 +194,7 @@ export const toggleUpvote = mutation({
 
     await ctx.db.insert("messageUpvotes", {
       messageId: args.messageId,
-      userTokenIdentifier: identity.tokenIdentifier,
+      actorHash: args.actorHash,
       createdAt: Date.now()
     });
     await ctx.db.patch(args.messageId, {

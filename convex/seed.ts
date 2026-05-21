@@ -22,8 +22,6 @@ export const seedDemo = mutation({
       slug: "learning-rust-at-night",
       description: "small notes from a stubborn systems rabbit hole",
       status: "obsessed",
-      ownerTokenIdentifier: "seed-owner",
-      ownerSubject: "seed-owner",
       ownerName: "mnwhl",
       searchText: searchText(
         "learning rust at night",
@@ -46,8 +44,6 @@ export const seedDemo = mutation({
       await ctx.db.insert("messages", {
         threadId,
         content,
-        ownerSubject: "seed-owner",
-        ownerTokenIdentifier: "seed-owner",
         upvoteCount: 0,
         createdAt: now - (entries.length - index) * 3_600_000
       });
