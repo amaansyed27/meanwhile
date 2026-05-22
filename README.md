@@ -152,3 +152,13 @@ npx convex env set MNWHL_ALLOW_SEEDING false
 3. Add env vars from `.env.example`.
 4. Run locally with `npm run dev`.
 5. Deploy Convex, then deploy both Vercel projects.
+
+---
+
+<div align="center">
+
+### Made with ❤️ by [Amaan Syed](https://github.com/amaansyed27)
+
+[GitHub](https://github.com/amaansyed27) • [LinkedIn](https://linkedin.com/in/amaansyed27)
+
+</div>
