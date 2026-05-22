@@ -90,3 +90,26 @@ a {
   background: var(--line);
   border-radius: 0;
 }
+
+.mnwhl-logo-cursor {
+  animation: mnwhl-cursor-blink 1.15s steps(1, end) infinite;
+  transform-origin: center;
+}
+
+@keyframes mnwhl-cursor-blink {
+  0%,
+  46% {
+    opacity: 1;
+  }
+
+  47%,
+  100% {
+    opacity: 0.18;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnwhl-logo-cursor {
+    animation: none;
+  }
+}
