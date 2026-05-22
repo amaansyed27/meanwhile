@@ -9,7 +9,8 @@ import {
   Plus,
   Save,
   Send,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -307,9 +308,38 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
   const [content, setContent] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [imageSource, setImageSource] = useState<"picked" | "pasted" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function setImage(nextFile: File | null, source: "picked" | "pasted" | null) {
+    setFile(nextFile);
+    setImageSource(nextFile ? source : null);
+  }
+
+  function handlePaste(event: React.ClipboardEvent) {
+    const item = Array.from(event.clipboardData.items).find((entry) =>
+      entry.type.startsWith("image/")
+    );
+    if (!item) {
+      return;
+    }
+
+    const pasted = item.getAsFile();
+    if (!pasted) {
+      return;
+    }
+
+    const extension = pasted.type.split("/")[1]?.replace("jpeg", "jpg") || "png";
+    const screenshot = new File(
+      [pasted],
+      `pasted-screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`,
+      { type: pasted.type }
+    );
+
+    setImage(screenshot, "pasted");
+  }
 
   async function uploadImage() {
     if (!file) {
@@ -350,7 +380,7 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
       });
       setContent("");
       setLinkUrl("");
-      setFile(null);
+      setImage(null, null);
       if (textareaRef.current) {
         textareaRef.current.value = "";
       }
@@ -368,6 +398,7 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
           event.preventDefault();
           void submit();
         }}
+        onPaste={handlePaste}
         className="space-y-3"
       >
         <Textarea
@@ -384,7 +415,7 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
           maxLength={4000}
           required
         />
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
           <label className="relative block">
             <LinkIcon
               size={14}
@@ -399,19 +430,40 @@ function OwnerComposer({ threadId }: { threadId: Id<"threads"> }) {
           </label>
           <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 border border-border px-3 text-sm lowercase transition hover:border-foreground">
             <ImageIcon size={14} />
-            {file ? "image selected" : "image"}
+            {file ? imageSource ?? "image" : "image"}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
               className="sr-only"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) =>
+                setImage(event.target.files?.[0] ?? null, "picked")
+              }
             />
           </label>
+          {file ? (
+            <Button
+              className="h-9 w-9 px-0"
+              aria-label="clear selected image"
+              onClick={() => setImage(null, null)}
+            >
+              <X size={14} />
+            </Button>
+          ) : null}
           <Button type="submit" variant="solid" disabled={busy || content.trim().length === 0}>
             <Send size={14} />
             publish
           </Button>
         </div>
+        {file ? (
+          <p className="font-mono text-[11px] text-faint">
+            {imageSource === "pasted" ? "pasted screenshot" : "selected image"} /{" "}
+            {file.name}
+          </p>
+        ) : (
+          <p className="font-mono text-[11px] text-faint">
+            paste a screenshot here, or choose an image file.
+          </p>
+        )}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
       </form>
     </section>
