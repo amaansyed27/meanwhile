@@ -6,7 +6,6 @@ import {
   ArrowUpRight,
   ImageIcon,
   LinkIcon,
-  LogOut,
   Plus,
   Save,
   Send,
@@ -99,20 +98,7 @@ export function OwnerDashboard() {
           <Link href="/" className="min-w-0">
             <Logo />
           </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Button
-              className="h-8 w-8 px-0"
-              aria-label="log out"
-              onClick={() => {
-                void fetch("/api/owner/logout", { method: "POST" }).then(() =>
-                  setSession("out")
-                );
-              }}
-            >
-              <LogOut size={14} />
-            </Button>
-          </div>
+          <ThemeToggle />
         </div>
         <div className="pt-4">
           <CreateThreadForm
