@@ -48,7 +48,17 @@ async function postReaction(body: Record<string, unknown>) {
   }
 }
 
-export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
+export function ReaderApp({
+  initialSlug,
+  initialThreads,
+  initialThread,
+  initialMessages
+}: {
+  initialSlug?: string;
+  initialThreads?: Thread[];
+  initialThread?: Thread | null;
+  initialMessages?: StreamMessage[];
+}) {
   const [search, setSearch] = useState("");
   const [reactionState, setReactionState] = useState<ReactionState>({
     threadHearted: false,
@@ -56,14 +66,15 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
   });
   const searchRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
-  const threads = useQuery(api.threads.list, {
+  const queriedThreads = useQuery(api.threads.list, {
     search: search || undefined,
     includeArchived: true
   }) as Thread[] | undefined;
-  const threadBySlug = useQuery(
+  const queriedThreadBySlug = useQuery(
     api.threads.getBySlug,
     initialSlug ? { slug: initialSlug } : "skip"
   ) as Thread | null | undefined;
+  const threads = queriedThreads ?? (search ? undefined : initialThreads);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -76,11 +87,21 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const selected = initialSlug ? threadBySlug : threads?.[0] ?? null;
-  const messages = useQuery(
+  const threadBySlug = initialSlug
+    ? queriedThreadBySlug === undefined
+      ? initialThread
+      : queriedThreadBySlug
+    : null;
+  const selected = initialSlug
+    ? threadBySlug
+    : threads?.[0] ?? initialThread ?? null;
+  const queriedMessages = useQuery(
     api.messages.list,
     selected ? { threadId: selected._id } : "skip"
   ) as StreamMessage[] | undefined;
+  const messages =
+    queriedMessages ??
+    (selected && selected._id === initialThread?._id ? initialMessages : undefined);
 
   useEffect(() => {
     if (!selected || !messages) {
@@ -148,10 +169,16 @@ export function ReaderApp({ initialSlug }: { initialSlug?: string }) {
             title="active"
             threads={activeThreads}
             pathname={pathname}
+            selectedSlug={selected?.slug}
             loading={!threads}
           />
           {archivedThreads.length > 0 ? (
-            <ThreadSection title="archived" threads={archivedThreads} pathname={pathname} />
+            <ThreadSection
+              title="archived"
+              threads={archivedThreads}
+              pathname={pathname}
+              selectedSlug={selected?.slug}
+            />
           ) : null}
         </nav>
         <div className="hidden border-t border-border px-4 py-4 md:block">
@@ -195,11 +222,13 @@ function ThreadSection({
   title,
   threads,
   pathname,
+  selectedSlug,
   loading = false
 }: {
   title: string;
   threads: Thread[];
   pathname: string;
+  selectedSlug?: string;
   loading?: boolean;
 }) {
   if (loading) {
@@ -220,21 +249,21 @@ function ThreadSection({
       <div className="flex gap-2 md:flex-col">
         {threads.map((thread) => {
           const href = `/t/${thread.slug}`;
-          const selected = pathname === href;
+          const selected = pathname === href || thread.slug === selectedSlug;
           return (
             <Link
               key={thread._id}
               href={href}
               className={`group block border px-3 py-2 text-sm transition hover:-translate-y-0.5 hover:translate-x-0.5 ${
                 selected
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-transparent hover:border-border"
+                  ? "border-foreground bg-[#ede8dc] text-[#171716] dark:bg-[#2e2c28] dark:text-[#ede7db]"
+                  : "border-transparent text-muted hover:border-border hover:bg-surface hover:text-foreground"
               }`}
             >
               <span className="block truncate lowercase">{thread.title}</span>
               <span
                 className={`mt-1 block font-mono text-[10px] ${
-                  selected ? "text-background/70" : "text-faint"
+                  selected ? "text-muted" : "text-faint"
                 }`}
               >
                 {thread.messageCount} updates
@@ -281,7 +310,7 @@ function ThreadHeader({
 
   return (
     <motion.header
-      initial={{ opacity: 0, y: 6 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: "easeOut" }}
       className="border-b border-border pb-8"

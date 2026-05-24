@@ -67,7 +67,10 @@ function MessageRow({
   onToggleUpvote: (messageId: Id<"messages">) => void;
 }) {
   return (
-    <li className="group grid gap-3 border-l border-border pl-4 md:grid-cols-[112px_minmax(0,1fr)] md:border-l-0 md:pl-0">
+    <li
+      id={`message-${message._id}`}
+      className="group grid gap-3 border-l border-border pl-4 md:grid-cols-[112px_minmax(0,1fr)] md:border-l-0 md:pl-0"
+    >
       <time
         dateTime={new Date(message.createdAt).toISOString()}
         className="font-mono text-[11px] uppercase tracking-normal text-faint md:pt-1"

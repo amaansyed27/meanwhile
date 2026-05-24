@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "./providers";
 import { MissingConfig } from "@/components/app/missing-config";
+import { getAppUrl, getSiteDescription, isOwnerSurface } from "@/lib/site";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,13 +15,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"]
 });
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const appUrl = getAppUrl();
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-const surface = process.env.MNWHL_SURFACE;
-const appDescription =
-  surface === "owner"
-    ? "private terminal for publishing ongoing things."
-    : "a quiet place for ongoing things.";
+const appDescription = getSiteDescription();
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
@@ -47,7 +44,26 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-icon.png"
-  }
+  },
+  robots: isOwnerSurface()
+    ? {
+        index: false,
+        follow: false,
+        googleBot: {
+          index: false,
+          follow: false
+        }
+      }
+    : {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          "max-image-preview": "large",
+          "max-snippet": -1
+        }
+      }
 };
 
 export const viewport: Viewport = {
