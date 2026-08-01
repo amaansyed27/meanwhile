@@ -4,7 +4,9 @@
 
 mnwhl is an asymmetric live-thread app. Public readers do not have accounts.
 They can read, heart threads, and upvote messages. One owner uses a separate
-private terminal to create threads and publish updates.
+private terminal to create threads and publish updates. Trusted coding agents
+can also write into threads through a protected intake endpoint, making the
+work feel like it is opening a window while it unfolds.
 
 ## Deployment Architecture
 
@@ -25,6 +27,7 @@ Both deployments share one Convex production backend:
 - `app/owner/page.tsx`: owner dashboard, or redirects to owner deployment on
   public surface
 - `app/api/owner/*`: password login, logout, session, and owner RPC
+- `app/api/agent/log`: bearer-token agent intake for live work notes
 - `app/api/reactions/*`: anonymous IP-hashed reaction endpoints
 - `components/app`: product UI
 - `components/ui`: small reusable primitives
@@ -68,6 +71,24 @@ Owner writes work like this:
 
 The secret is never exposed to browser JavaScript.
 
+## Agent Intake Flow
+
+Trusted agents call `/api/agent/log` with `Authorization: Bearer
+$MNWHL_AGENT_SECRET`. The route validates the payload, resolves or creates the
+target thread, and posts a message through Convex using `MNWHL_SERVER_SECRET`.
+
+Agent-authored rows are ordinary durable messages with optional metadata:
+
+- `source`: `agent`
+- `agentName`: the publishing agent, such as `codex`
+- `agentRunId`: an optional run/session identifier
+- `agentEvent`: `note`, `started`, `decision`, `blocked`, `fixed`, `verified`,
+  or `shipped`
+
+This keeps agent publishing separate from the owner session while preserving the
+same Convex permission checks, realtime stream, search, SEO, and public reaction
+model.
+
 ## Reader Reaction Flow
 
 Readers do not sign in.
@@ -107,6 +128,7 @@ Allowed types: JPEG, PNG, WebP, GIF. Max size: 8 MB.
 - No reader accounts or public auth provider.
 - No raw IP addresses are stored.
 - Owner writes require both an HttpOnly session and Convex server secret.
+- Agent writes require a separate bearer token and Convex server secret.
 - Convex never trusts client-provided ownership.
 - Text is not rendered as HTML.
 - URLs are normalized and protocol-restricted.

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { statusValidator } from "./schema";
+import { messageSourceValidator, statusValidator } from "./schema";
 import { requireServerSecret } from "./lib/secrets";
 import { enforceRateLimit } from "./lib/rateLimit";
 import {
@@ -12,8 +12,8 @@ import {
   searchText
 } from "./lib/text";
 
-async function uniqueSlug(ctx: MutationCtx, title: string) {
-  const base = makeSlug(title);
+async function uniqueSlug(ctx: MutationCtx, title: string, requestedSlug?: string) {
+  const base = requestedSlug ? makeSlug(requestedSlug) : makeSlug(title);
   let candidate = base;
   let suffix = 2;
 
@@ -77,21 +77,48 @@ export const getBySlug = query({
   }
 });
 
+export const get = query({
+  args: {
+    threadId: v.id("threads")
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      return null;
+    }
+
+    return await withViewerHeart(ctx, thread);
+  }
+});
+
 export const create = mutation({
   args: {
     title: v.string(),
+    slug: v.optional(v.string()),
     description: v.optional(v.string()),
     status: v.optional(statusValidator),
+    source: v.optional(messageSourceValidator),
+    agentName: v.optional(v.string()),
+    agentRunId: v.optional(v.string()),
     serverSecret: v.string()
   },
   handler: async (ctx, args) => {
     requireServerSecret(ctx, args.serverSecret);
-    await enforceRateLimit(ctx, "owner", "create-thread", 10, 60_000);
+    const source = args.source ?? "owner";
+    const agentName = cleanOptionalText(args.agentName, 80);
+    const agentRunId = cleanOptionalText(args.agentRunId, 160);
+    await enforceRateLimit(
+      ctx,
+      source === "agent" ? `agent:${agentName ?? "unknown"}` : "owner",
+      source === "agent" ? "create-agent-thread" : "create-thread",
+      source === "agent" ? 30 : 10,
+      60_000
+    );
 
     const now = Date.now();
     const title = cleanText(args.title, 120);
     const description = cleanOptionalText(args.description, 500);
-    const slug = await uniqueSlug(ctx, title);
+    const slug = await uniqueSlug(ctx, title, args.slug);
 
     return await ctx.db.insert("threads", {
       title,
@@ -99,6 +126,9 @@ export const create = mutation({
       description,
       status: args.status ?? "active",
       ownerName: "mnwhl",
+      source,
+      agentName,
+      agentRunId,
       searchText: searchText(title, description),
       heartCount: 0,
       messageCount: 0,

@@ -11,6 +11,17 @@ export type StreamMessage = {
   content: string;
   linkUrl?: string;
   imageUrl?: string | null;
+  source?: "owner" | "agent";
+  agentName?: string;
+  agentRunId?: string;
+  agentEvent?:
+    | "note"
+    | "started"
+    | "decision"
+    | "blocked"
+    | "fixed"
+    | "verified"
+    | "shipped";
   upvoteCount: number;
   createdAt: number;
   viewerHasUpvoted: boolean;
@@ -71,12 +82,16 @@ function MessageRow({
       id={`message-${message._id}`}
       className="group grid gap-3 border-l border-border pl-4 md:grid-cols-[112px_minmax(0,1fr)] md:border-l-0 md:pl-0"
     >
-      <time
-        dateTime={new Date(message.createdAt).toISOString()}
-        className="font-mono text-[11px] uppercase tracking-normal text-faint md:pt-1"
-      >
-        {formatShortTime(message.createdAt)}
-      </time>
+      <div className="space-y-1 font-mono text-[11px] uppercase tracking-normal text-faint md:pt-1">
+        <time dateTime={new Date(message.createdAt).toISOString()}>
+          {formatShortTime(message.createdAt)}
+        </time>
+        {message.source === "agent" ? (
+          <div className="text-[10px] lowercase text-muted">
+            {message.agentEvent ?? "note"} / {message.agentName ?? "agent"}
+          </div>
+        ) : null}
+      </div>
       <article className="min-w-0">
         <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground">
           {message.content}

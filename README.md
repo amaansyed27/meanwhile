@@ -32,6 +32,7 @@ serves.
 - Thread hearts and message upvotes limited by server-derived IP hash
 - Owner-only dashboard protected by an HttpOnly password session
 - Owner-only thread CRUD, message posting, message deletion, and image uploads
+- Protected agent intake endpoint for coding agents to publish live work notes
 - Backend authorization for owner writes through a shared server secret
 - Searchable thread navigation
 - Dark/light theme toggle
@@ -84,6 +85,7 @@ MNWHL_SERVER_SECRET=
 MNWHL_OWNER_PASSWORD=
 MNWHL_SESSION_SECRET=
 MNWHL_REACTION_SALT=
+MNWHL_AGENT_SECRET=
 ```
 
 Convex backend:
@@ -94,6 +96,28 @@ MNWHL_ALLOW_SEEDING=false
 ```
 
 `MNWHL_SERVER_SECRET` must match between Vercel and Convex.
+`MNWHL_AGENT_SECRET` is a separate bearer token for trusted local agents. Do not
+commit it or expose it in browser code.
+
+## Agent Intake
+
+Trusted coding agents can post directly into a live thread:
+
+```bash
+curl -X POST "https://falconwritesmnhl.vercel.app/api/agent/log" \
+  -H "Authorization: Bearer $MNWHL_AGENT_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "threadSlug": "building-mnwhl",
+    "agentName": "codex",
+    "event": "verified",
+    "content": "build is green. checking the live page before handing this back."
+  }'
+```
+
+If `threadSlug` does not exist, pass `threadTitle` and mnwhl will create a new
+agent-authored thread before posting the update. Supported events are `note`,
+`started`, `decision`, `blocked`, `fixed`, `verified`, and `shipped`.
 
 ## Convex
 
@@ -138,6 +162,8 @@ npx convex env set MNWHL_ALLOW_SEEDING false
 - Owner dashboard uses an HttpOnly signed cookie.
 - Next API routes verify the owner session before performing owner mutations.
 - Convex owner mutations require `MNWHL_SERVER_SECRET`.
+- Agent intake requires `MNWHL_AGENT_SECRET` and still writes through Convex
+  mutations protected by `MNWHL_SERVER_SECRET`.
 - Reader reaction identity is an HMAC of request IP plus `MNWHL_REACTION_SALT`.
 - Raw IP addresses are not stored in Convex.
 - Uploaded images are MIME and size checked before attachment.

@@ -4,8 +4,9 @@ import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireServerSecret } from "./lib/secrets";
 import { enforceRateLimit } from "./lib/rateLimit";
-import { cleanMessage, normalizeUrl } from "./lib/text";
+import { cleanMessage, cleanOptionalText, normalizeUrl } from "./lib/text";
 import { validateImageUpload } from "./lib/uploads";
+import { agentEventValidator, messageSourceValidator } from "./schema";
 
 async function withViewerVoteAndImage(ctx: QueryCtx, message: Doc<"messages">) {
   const imageUrl = message.imageStorageId
@@ -48,11 +49,24 @@ export const post = mutation({
     linkUrl: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
     filename: v.optional(v.string()),
+    source: v.optional(messageSourceValidator),
+    agentName: v.optional(v.string()),
+    agentRunId: v.optional(v.string()),
+    agentEvent: v.optional(agentEventValidator),
     serverSecret: v.string()
   },
   handler: async (ctx, args) => {
     requireServerSecret(ctx, args.serverSecret);
-    await enforceRateLimit(ctx, "owner", "post-message", 40, 60_000);
+    const source = args.source ?? "owner";
+    const agentName = cleanOptionalText(args.agentName, 80);
+    const agentRunId = cleanOptionalText(args.agentRunId, 160);
+    await enforceRateLimit(
+      ctx,
+      source === "agent" ? `agent:${agentName ?? "unknown"}` : "owner",
+      source === "agent" ? "post-agent-message" : "post-message",
+      source === "agent" ? 120 : 40,
+      60_000
+    );
 
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
@@ -73,6 +87,10 @@ export const post = mutation({
       content,
       linkUrl,
       imageStorageId: args.imageStorageId,
+      source,
+      agentName,
+      agentRunId,
+      agentEvent: args.agentEvent,
       upvoteCount: 0,
       createdAt: now
     });

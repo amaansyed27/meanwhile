@@ -10,6 +10,21 @@ export const statusValidator = v.union(
   v.literal("archived")
 );
 
+export const messageSourceValidator = v.union(
+  v.literal("owner"),
+  v.literal("agent")
+);
+
+export const agentEventValidator = v.union(
+  v.literal("note"),
+  v.literal("started"),
+  v.literal("decision"),
+  v.literal("blocked"),
+  v.literal("fixed"),
+  v.literal("verified"),
+  v.literal("shipped")
+);
+
 export default defineSchema({
   threads: defineTable({
     title: v.string(),
@@ -17,6 +32,9 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: statusValidator,
     ownerName: v.optional(v.string()),
+    source: v.optional(messageSourceValidator),
+    agentName: v.optional(v.string()),
+    agentRunId: v.optional(v.string()),
     searchText: v.string(),
     heartCount: v.number(),
     messageCount: v.number(),
@@ -37,6 +55,10 @@ export default defineSchema({
     content: v.string(),
     linkUrl: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
+    source: v.optional(messageSourceValidator),
+    agentName: v.optional(v.string()),
+    agentRunId: v.optional(v.string()),
+    agentEvent: v.optional(agentEventValidator),
     upvoteCount: v.number(),
     createdAt: v.number(),
     updatedAt: v.optional(v.number())

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  Clipboard,
   ImageIcon,
   LinkIcon,
   Plus,
@@ -41,6 +42,17 @@ type Message = {
   content: string;
   linkUrl?: string;
   imageUrl?: string | null;
+  source?: "owner" | "agent";
+  agentName?: string;
+  agentRunId?: string;
+  agentEvent?:
+    | "note"
+    | "started"
+    | "decision"
+    | "blocked"
+    | "fixed"
+    | "verified"
+    | "shipped";
   upvoteCount: number;
   createdAt: number;
 };
@@ -138,7 +150,10 @@ export function OwnerDashboard() {
               <OwnerComposer threadId={selectedThread._id} />
               <OwnerMessageList messages={messages} />
             </div>
-            <ThreadEditor key={selectedThread._id} thread={selectedThread} />
+            <div className="space-y-4 xl:sticky xl:top-8 xl:h-fit">
+              <AgentIntakePanel threadSlug={selectedThread.slug} />
+              <ThreadEditor key={selectedThread._id} thread={selectedThread} />
+            </div>
           </div>
         ) : (
           <div className="mx-auto max-w-xl py-24">
@@ -488,6 +503,11 @@ function OwnerMessageList({ messages }: { messages: Message[] | undefined }) {
             <time className="font-mono text-[11px] uppercase text-faint">
               {formatShortTime(message.createdAt)}
             </time>
+            {message.source === "agent" ? (
+              <span className="mr-auto font-mono text-[10px] lowercase text-muted">
+                {message.agentEvent ?? "note"} / {message.agentName ?? "agent"}
+              </span>
+            ) : null}
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 font-mono text-[11px] text-faint">
                 <ArrowUpRight size={12} /> {message.upvoteCount}
@@ -536,6 +556,44 @@ function OwnerMessageList({ messages }: { messages: Message[] | undefined }) {
   );
 }
 
+function AgentIntakePanel({ threadSlug }: { threadSlug: string }) {
+  const [copied, setCopied] = useState(false);
+  const endpoint = "https://falconwritesmnhl.vercel.app/api/agent/log";
+  const sample = `curl -X POST "${endpoint}" \\
+  -H "Authorization: Bearer $MNWHL_AGENT_SECRET" \\
+  -H "Content-Type: application/json" \\
+  -d '{"threadSlug":"${threadSlug}","agentName":"codex","event":"verified","content":"build is green. doing one final browser pass before handing this back."}'`;
+
+  async function copySample() {
+    await navigator.clipboard.writeText(sample);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  return (
+    <aside className="border border-border p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="font-mono text-[11px] uppercase text-faint">agent ingress</p>
+        <Button
+          className="h-8 w-8 px-0"
+          aria-label="copy agent log curl"
+          onClick={() => void copySample()}
+        >
+          <Clipboard size={13} />
+        </Button>
+      </div>
+      <p className="text-sm leading-6 text-muted">
+        agents can open up here while they work. send bearer auth with{" "}
+        <span className="font-mono text-foreground">MNWHL_AGENT_SECRET</span>.
+      </p>
+      <pre className="mnwhl-scrollbar mt-4 overflow-x-auto border border-border bg-background p-3 font-mono text-[11px] leading-5 text-muted">
+        {sample}
+      </pre>
+      {copied ? <p className="mt-2 text-xs text-muted">copied.</p> : null}
+    </aside>
+  );
+}
+
 function ThreadEditor({ thread }: { thread: Thread }) {
   const [title, setTitle] = useState(thread.title);
   const [description, setDescription] = useState(thread.description ?? "");
@@ -560,7 +618,7 @@ function ThreadEditor({ thread }: { thread: Thread }) {
   }
 
   return (
-    <aside className="h-fit border border-border p-4 xl:sticky xl:top-8">
+    <aside className="h-fit border border-border p-4">
       <p className="mb-4 font-mono text-[11px] uppercase text-faint">thread controls</p>
       <div className="space-y-3">
         <Input value={title} onChange={(event) => setTitle(event.target.value)} />
